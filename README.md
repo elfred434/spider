@@ -31,3 +31,5 @@ Le fichier `.glb` est un modèle original et ne reprend pas de marque ou de cost
 - `world/buildings.js` contient les générateurs de tours vitrées, tours Art déco, blocs résidentiels, tours en gradins et tours côtières tropicales.
 - `world/building_styles.json` documente les familles architecturales utilisées comme inspiration.
 - La génération est déterministe : un même chunk produit les mêmes bâtiments à chaque lancement.
+- `world/scenery.js` ajoute les routes, lampadaires, passerelles, arbres, rochers, montagnes, neige, lave, cratères et fumées.
+- `world/scenery_styles.json` documente les éléments de décor par biome.

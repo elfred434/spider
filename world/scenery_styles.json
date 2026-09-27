@@ -1,0 +1,9 @@
+{
+  "description": "Familles de décors 3D générées autour des bâtiments et dans les biomes éloignés.",
+  "biomes": {
+    "city": ["routes suspendues", "lampadaires", "ponts urbains", "panneaux lumineux", "petits arbres"],
+    "forest": ["arbres géants", "racines", "rochers", "fougères stylisées", "passerelles en bois"],
+    "mountains": ["falaises", "crêtes rocheuses", "neige", "ponts suspendus", "rochers flottants"],
+    "volcano": ["coulées de lave", "basalte", "cratères", "fumerolles", "rochers brûlants"]
+  }
+}

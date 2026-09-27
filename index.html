@@ -63,6 +63,7 @@
   </section>
 
 <script src="world/buildings.js"></script>
+<script src="world/scenery.js"></script>
 <script>
 'use strict';
 
@@ -377,6 +378,21 @@ function generateChunk(i) {
 
   addObject([0,-2,z], [150,4,42], biome.ground);
 
+  const sceneryGenerator=window.WebGlideScenery;
+  const hasGeneratedScenery=!!(sceneryGenerator && typeof sceneryGenerator.generateChunk==='function');
+  if (hasGeneratedScenery) {
+    sceneryGenerator.generateChunk({
+      biome:biome.name,
+      index:i,
+      z,
+      seed,
+      chunkLength:40,
+      rand,
+      addObject:obj=>world.objects.push({p:obj.p,s:obj.s,color:obj.color,shape:obj.shape||'cube',rot:obj.rot||0,rotX:obj.rotX||0,rotY:obj.rotY||0,rotZ:obj.rotZ||0}),
+      addAnchor:p=>world.anchors.push({p})
+    });
+  }
+
   if (biome.name === 'Ville') {
     const buildingGenerator=window.WebGlideBuildings;
     if (buildingGenerator && typeof buildingGenerator.generateCityChunk === 'function') {
@@ -385,7 +401,7 @@ function generateChunk(i) {
         z,
         seed,
         rand,
-        addObject:obj=>world.objects.push({p:obj.p,s:obj.s,color:obj.color,rotY:obj.rotY||0}),
+        addObject:obj=>world.objects.push({p:obj.p,s:obj.s,color:obj.color,shape:obj.shape||'cube',rot:obj.rot||0,rotX:obj.rotX||0,rotY:obj.rotY||0,rotZ:obj.rotZ||0}),
         addAnchor:p=>world.anchors.push({p})
       });
     } else {
@@ -406,7 +422,7 @@ function generateChunk(i) {
         addAnchor([-48,13,z+8]);
       }
     }
-  } else if (biome.name === 'Forêt géante') {
+  } else if (biome.name === 'Forêt géante' && !hasGeneratedScenery) {
     for (let t=0; t<9; t++) {
       const x = (rand(seed*5+t*13)-.5)*120;
       const tz = z + (rand(seed*8+t*19)-.5)*34;
@@ -415,7 +431,7 @@ function generateChunk(i) {
       addObject([x,h+5,tz], [12+rand(seed+t)*8,9+rand(seed+t*2)*8,12+rand(seed+t*3)*8], [.05,.38+.12*rand(seed+t),.18]);
       addAnchor([x,h+12,tz]);
     }
-  } else if (biome.name === 'Montagnes') {
+  } else if (biome.name === 'Montagnes' && !hasGeneratedScenery) {
     for (let t=0; t<7; t++) {
       const x=(rand(seed*4+t)-.5)*130;
       const h=14+rand(seed*9+t)*38;
@@ -423,7 +439,7 @@ function generateChunk(i) {
       addObject([x,h/2,tz], [16+rand(seed+t)*15,h,16+rand(seed*2+t)*15], [.20,.22,.27]);
       addAnchor([x,h+5,tz]);
     }
-  } else {
+  } else if (biome.name === 'Volcan' && !hasGeneratedScenery) {
     for (let t=0; t<7; t++) {
       const x=(rand(seed*6+t)-.5)*120;
       const h=15+rand(seed*10+t)*34;
@@ -681,7 +697,8 @@ function render() {
 
   for (const o of world.objects) {
     if (Math.abs(o.p[2]-player.p[2])>260 || Math.abs(o.p[0]-player.p[0])>160) continue;
-    drawCube(o,viewProj);
+    if (o.shape==='sphere') drawSphere(o,viewProj);
+    else drawCube(o,viewProj);
   }
   for (const a of world.anchors) {
     if (Math.abs(a.p[2]-player.p[2])>180 || Math.abs(a.p[0]-player.p[0])>130) continue;
