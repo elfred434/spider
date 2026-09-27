@@ -123,7 +123,7 @@
 
   function generateForest(ctx) {
     // Sol forestier irrégulier et plaques de mousse.
-    add(ctx,[0,-1.2,ctx.z],[150,2.4,ctx.chunkLength/2],[.035,.13,.065]);
+    add(ctx,[0,-2,ctx.z],[150,2,ctx.chunkLength/2],[.035,.13,.065]);
     for (let t=0; t<7; t++) {
       const x=(ctx.rand(ctx.seed+t*13)-.5)*120;
       const z=ctx.z+(ctx.rand(ctx.seed+t*19)-.5)*32;
@@ -159,7 +159,7 @@
   }
 
   function generateMountains(ctx) {
-    add(ctx,[0,-1.2,ctx.z],[150,2.4,ctx.chunkLength/2],[.12,.13,.16]);
+    add(ctx,[0,-2,ctx.z],[150,2,ctx.chunkLength/2],[.12,.13,.16]);
     for (let peak=0; peak<5; peak++) {
       const x=(ctx.rand(ctx.seed+peak*10)-.5)*130;
       const z=ctx.z+(ctx.rand(ctx.seed+peak*14)-.5)*30;
@@ -187,7 +187,7 @@
   }
 
   function generateVolcano(ctx) {
-    add(ctx,[0,-1.2,ctx.z],[150,2.4,ctx.chunkLength/2],C.ash);
+    add(ctx,[0,-2,ctx.z],[150,2,ctx.chunkLength/2],C.ash);
     for (let b=0; b<8; b++) {
       const x=(ctx.rand(ctx.seed+b*8)-.5)*125;
       const z=ctx.z+(ctx.rand(ctx.seed+b*11)-.5)*32;

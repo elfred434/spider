@@ -365,6 +365,12 @@ function biomeAt(distance) {
   if (distance < 2600) return { name:'Montagnes', sky:[0.10,0.15,0.22], ground:[0.18,0.17,0.19] };
   return { name:'Volcan', sky:[0.17,0.035,0.025], ground:[0.16,0.045,0.025] };
 }
+const PLAYER_FOOT_OFFSET=1.98;
+function groundHeightAt(x,z) {
+  // La route urbaine est légèrement surélevée par rapport au terrain.
+  const distance=Math.max(0,-z);
+  return biomeAt(distance).name==='Ville' ? .24 : 0;
+}
 function addObject(p, s, color, rot=0) { world.objects.push({p,s,color,rot}); }
 function addAnchor(p) { world.anchors.push({p}); }
 
@@ -376,7 +382,7 @@ function generateChunk(i) {
   const biome = biomeAt(d);
   const seed = i + 100;
 
-  addObject([0,-2,z], [150,4,42], biome.ground);
+  addObject([0,-2,z], [150,2,42], biome.ground);
 
   const sceneryGenerator=window.WebGlideScenery;
   const hasGeneratedScenery=!!(sceneryGenerator && typeof sceneryGenerator.generateChunk==='function');
@@ -534,9 +540,30 @@ function updatePhysics(dt) {
   } else {
     v[1]+=gravity*dt;
     p[0]+=v[0]*dt; p[1]+=v[1]*dt; p[2]+=v[2]*dt;
-    if (p[1] < 2) {
-      p[1]=2; if(v[1]<0) v[1]=0; player.grounded=true;
-    } else player.grounded=false;
+    player.grounded=false;
+  }
+
+  // Collision continue avec le sol. Elle est appliquée aussi pendant une
+  // voltige : le joueur ne peut plus traverser le terrain puis être replacé
+  // brutalement sur la trajectoire de la corde.
+  p[0]=Math.max(-105,Math.min(105,p[0]));
+  const floor=groundHeightAt(p[0],p[2]);
+  const minimumY=floor+PLAYER_FOOT_OFFSET;
+  let hitGround=false;
+  if (p[1] < minimumY) {
+    p[1]=minimumY;
+    if (v[1]<0) v[1]=0;
+    player.grounded=true;
+    hitGround=true;
+  }
+
+  // Une corde peut devenir légèrement trop courte après un contact avec le
+  // sol. On la remet en tension seulement à ce moment précis, sans modifier
+  // sa longueur pendant une voltige normale.
+  if (player.rope && hitGround) {
+    const ropeVector=sub(p,player.rope.anchor.p);
+    const ropeDistance=len(ropeVector);
+    if (ropeDistance > player.rope.length) player.rope.length=ropeDistance;
   }
 
   if (jumpWasPressed) {
@@ -544,7 +571,6 @@ function updatePhysics(dt) {
     else if (player.grounded) { v[1]=13; player.grounded=false; }
     jumpWasPressed=false;
   }
-  p[0]=Math.max(-105,Math.min(105,p[0]));
 }
 
 // ------------------------- Rendering --------------------------

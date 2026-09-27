@@ -33,3 +33,7 @@ Le fichier `.glb` est un modèle original et ne reprend pas de marque ou de cost
 - La génération est déterministe : un même chunk produit les mêmes bâtiments à chaque lancement.
 - `world/scenery.js` ajoute les routes, lampadaires, passerelles, arbres, rochers, montagnes, neige, lave, cratères et fumées.
 - `world/scenery_styles.json` documente les éléments de décor par biome.
+
+## Sol et voltige
+
+Le contrôleur de mouvement possède maintenant une collision continue avec le sol. La hauteur du sol est calculée selon le biome, le joueur est bloqué au niveau des pieds même pendant une voltige, et la corde ne provoque plus de téléportation sous le terrain.
