@@ -14,10 +14,12 @@ Puis ouvrir <http://localhost:8000>.
 
 ## Commandes
 
-- Clic droit maintenu : accrocher une toile
+- Clic droit maintenu : accrocher une toile à n'importe quelle surface solide visée
 - Relâcher le clic droit : couper la toile
+- W/S : avancer ou freiner
+- A/D : diriger le personnage
+- Shift : freiner fortement et stabiliser le mouvement
 - Espace : sauter ou se propulser
-- WASD : diriger le personnage
 - Échap : couper la toile
 
 ## Modèle 3D
@@ -36,4 +38,4 @@ Le fichier `.glb` est un modèle original et ne reprend pas de marque ou de cost
 
 ## Sol et voltige
 
-Le contrôleur de mouvement possède maintenant une collision continue avec le sol. La hauteur du sol est calculée selon le biome, le joueur est bloqué au niveau des pieds même pendant une voltige, et la corde ne provoque plus de téléportation sous le terrain.
+Le contrôleur de mouvement possède maintenant une collision continue avec le sol. La hauteur du sol est calculée selon le biome, le joueur est bloqué au niveau des pieds même pendant une voltige, et la corde ne provoque plus de téléportation sous le terrain. Les toiles ne dépendent plus de points prédéfinis : un rayon part de la position visée par la souris et s'accroche directement à la surface d'un bâtiment ou d'un élément solide du décor.

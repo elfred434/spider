@@ -50,7 +50,7 @@
     </div>
     <div id="status">Prêt à voltiger</div>
     <div id="crosshair"></div>
-    <div id="hint">Clic droit maintenu : lancer une toile · Espace : sauter / se propulser · WASD : diriger</div>
+    <div id="hint">Clic droit maintenu : toile sur toute surface solide · W/S : avancer ou freiner · A/D : diriger · Espace : sauter / se propulser</div>
   </div>
 
   <section id="start">
@@ -345,7 +345,7 @@ function drawImportedHero(vp) {
 
 // ------------------------- World -----------------------------
 const world = { objects: [], anchors: [], generated: new Set() };
-const player = { p:[0,4,0], v:[0,0,-22], rope:null, grounded:true };
+const player = { p:[0,4,0], v:[0,0,0], rope:null, grounded:true };
 const camera = { p:[0,11,18] };
 const animation = { phase:0, runBlend:0, swingBlend:0, breathing:0 };
 let viewProj = new Float32Array(16);
@@ -483,45 +483,102 @@ function releaseRope() {
   statusEl.textContent = 'Toile coupée';
   statusEl.style.color = '#ffcf74';
 }
-function findAnchor() {
-  let best=null, bestScore=Infinity;
-  const cx=canvas.width/2, cy=canvas.height/2;
-  for (const a of world.anchors) {
-    const dWorld=len(sub(a.p,player.p));
-    if (dWorld > 115) continue;
-    const q=transform(viewProj,a.p);
-    if (q[2] < -1 || q[2] > 1) continue;
-    const sx=(q[0]*.5+.5)*canvas.width;
-    const sy=(1-(q[1]*.5+.5))*canvas.height;
-    const screenD=Math.hypot(sx-cx,sy-cy)/canvas.width;
-    if (screenD > .24) continue;
-    const score=screenD*180 + dWorld*.16;
-    if (score<bestScore) { bestScore=score; best=a; }
-  }
-  return best;
+function cameraTarget() {
+  return [player.p[0],player.p[1]+1.3,player.p[2]-22];
 }
-function attachRope() {
-  const a=findAnchor();
-  if (!a) {
-    statusEl.textContent='Aucun point visé';
+function screenRay(clientX,clientY) {
+  const rect=canvas.getBoundingClientRect();
+  const nx=((clientX-rect.left)/rect.width)*2-1;
+  const ny=1-((clientY-rect.top)/rect.height)*2;
+  const forward=norm(sub(cameraTarget(),camera.p));
+  const right=norm(cross(forward,[0,1,0]));
+  const up=norm(cross(right,forward));
+  const scale=Math.tan(Math.PI/6);
+  const aspect=rect.width/rect.height;
+  return {
+    origin:[camera.p[0],camera.p[1],camera.p[2]],
+    direction:norm(add(forward,add(mul(right,nx*scale*aspect),mul(up,ny*scale))))
+  };
+}
+function rayAabb(origin,direction,min,max) {
+  let near=0, far=260;
+  for (let axis=0; axis<3; axis++) {
+    const o=origin[axis], d=direction[axis];
+    if (Math.abs(d)<1e-7) {
+      if (o<min[axis] || o>max[axis]) return null;
+      continue;
+    }
+    let t1=(min[axis]-o)/d, t2=(max[axis]-o)/d;
+    if (t1>t2) { const swap=t1; t1=t2; t2=swap; }
+    near=Math.max(near,t1);
+    far=Math.min(far,t2);
+    if (near>far) return null;
+  }
+  return near>=0 ? near : far>=0 ? far : null;
+}
+function raySphere(origin,direction,center,radius) {
+  const offset=sub(origin,center);
+  const b=dot(offset,direction);
+  const c=dot(offset,offset)-radius*radius;
+  const discriminant=b*b-c;
+  if (discriminant<0) return null;
+  const root=Math.sqrt(discriminant);
+  const t1=-b-root, t2=-b+root;
+  if (t1>=0 && t1<=260) return t1;
+  if (t2>=0 && t2<=260) return t2;
+  return null;
+}
+function raycastSurface(clientX,clientY) {
+  const ray=screenRay(clientX,clientY);
+  let closest=null;
+  for (const object of world.objects) {
+    // Les routes et le sol ne sont pas des surfaces de toile.
+    if (object.p[1]+object.s[1]<3) continue;
+    const distanceToPlayer=len(sub(object.p,player.p));
+    if (distanceToPlayer>240) continue;
+    let distance=null;
+    if (object.shape==='sphere') {
+      const radius=Math.max(object.s[0],object.s[1],object.s[2]);
+      distance=raySphere(ray.origin,ray.direction,object.p,radius);
+    } else {
+      // Boîtes englobantes : elles fonctionnent aussi pour les façades et
+      // les immeubles dont la rotation est légère.
+      const min=[object.p[0]-object.s[0],object.p[1]-object.s[1],object.p[2]-object.s[2]];
+      const max=[object.p[0]+object.s[0],object.p[1]+object.s[1],object.p[2]+object.s[2]];
+      distance=rayAabb(ray.origin,ray.direction,min,max);
+    }
+    if (distance===null) continue;
+    if (!closest || distance<closest.distance) {
+      closest={distance,point:add(ray.origin,mul(ray.direction,distance))};
+    }
+  }
+  return closest;
+}
+function attachRope(clientX=innerWidth/2,clientY=innerHeight/2) {
+  const hit=raycastSurface(clientX,clientY);
+  if (!hit) {
+    statusEl.textContent='Aucune surface solide visée';
     statusEl.style.color='#ff9c9c';
     return;
   }
-  const d=len(sub(player.p,a.p));
-  player.rope={ anchor:a, length:Math.max(7,d*.94) };
-  statusEl.textContent='Toile accrochée';
+  const d=len(sub(player.p,hit.point));
+  player.rope={ anchor:{p:hit.point}, length:Math.max(6,d*.96) };
+  statusEl.textContent='Toile accrochée à la surface';
   statusEl.style.color='#55e7ff';
 }
 function updatePhysics(dt) {
   const p=player.p, v=player.v;
   const gravity=-25;
-  // Le déplacement vers l'avant est automatique : le joueur reste en mouvement.
-  if (v[2] > -25) v[2] -= 15*dt;
-  if (keys.w) v[2] -= 18*dt;
-  if (keys.s) v[2] += 12*dt;
+  // Déplacement libre : le joueur peut accélérer, freiner et s'arrêter.
+  // La touche Shift agit comme un frein aérien pour garder une position.
+  if (keys.w) v[2] -= 22*dt;
+  if (keys.s) v[2] += 18*dt;
   if (keys.a) v[0] -= 24*dt;
   if (keys.d) v[0] += 24*dt;
-  v[0] *= Math.pow(.986,dt*60);
+  const horizontalFriction=player.rope ? (keys.shift ? .88 : .997) : (player.grounded ? .76 : .985);
+  const forwardFriction=player.rope ? (keys.shift ? .88 : .997) : (player.grounded ? .76 : .985);
+  v[0] *= Math.pow(horizontalFriction,dt*60);
+  v[2] *= Math.pow(forwardFriction,dt*60);
 
   if (player.rope) {
     v[1] += gravity*dt;
@@ -726,11 +783,6 @@ function render() {
     if (o.shape==='sphere') drawSphere(o,viewProj);
     else drawCube(o,viewProj);
   }
-  for (const a of world.anchors) {
-    if (Math.abs(a.p[2]-player.p[2])>180 || Math.abs(a.p[0]-player.p[0])>130) continue;
-    drawCube({p:a.p,s:[.7,.7,.7],color:[.15,.9,1]},viewProj);
-  }
-
   // Le modèle GLB est prioritaire ; le héros procédural sert de secours.
   if (importedModel) drawImportedHero(viewProj);
   else drawHero(viewProj);
@@ -755,7 +807,7 @@ canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('pointerdown',e=>{
   if (!started || e.button!==2) return;
   e.preventDefault();
-  attachRope();
+  attachRope(e.clientX,e.clientY);
   canvas.setPointerCapture?.(e.pointerId);
 });
 canvas.addEventListener('pointerup',e=>{
@@ -765,7 +817,7 @@ startButton.addEventListener('click',()=>{
   started=true;
   startScreen.classList.add('hidden');
   canvas.focus();
-  statusEl.textContent=importedModel ? 'Modèle GLB actif' : 'Cherche un point lumineux';
+  statusEl.textContent=importedModel ? 'Modèle GLB actif' : 'Vise une surface solide';
   statusEl.style.color='#55e7ff';
 });
 
