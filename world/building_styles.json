@@ -1,0 +1,30 @@
+{
+  "description": "Références architecturales générales utilisées pour la génération procédurale de Web Glide. Les bâtiments sont originaux et ne reproduisent pas exactement un bâtiment existant.",
+  "styles": [
+    {
+      "id": "glass_financial_tower",
+      "inspiration": "quartiers financiers contemporains et tours de verre",
+      "features": ["façades vitrées", "noyau vertical sombre", "toit technique", "fenêtres répétitives"]
+    },
+    {
+      "id": "art_deco_tower",
+      "inspiration": "tours Art déco de New York et Chicago",
+      "features": ["silhouette en gradins", "lignes verticales", "couronnement géométrique", "fenêtres étroites"]
+    },
+    {
+      "id": "european_residential_block",
+      "inspiration": "îlots résidentiels européens et immeubles à corniches",
+      "features": ["façade régulière", "corniches horizontales", "balcons", "toit mansardé stylisé"]
+    },
+    {
+      "id": "stepped_mega_tower",
+      "inspiration": "tours modernes en terrasses des grandes métropoles",
+      "features": ["volumes décalés", "terrasses", "retraits successifs", "antenne"]
+    },
+    {
+      "id": "coastal_tropical_tower",
+      "inspiration": "immeubles résidentiels des villes côtières tropicales",
+      "features": ["balcons profonds", "brise-soleil", "façades claires", "toit végétalisé stylisé"]
+    }
+  ]
+}

@@ -62,6 +62,7 @@
     </div>
   </section>
 
+<script src="world/buildings.js"></script>
 <script>
 'use strict';
 
@@ -377,21 +378,33 @@ function generateChunk(i) {
   addObject([0,-2,z], [150,4,42], biome.ground);
 
   if (biome.name === 'Ville') {
-    for (let col=-3; col<=3; col++) {
-      const r = rand(seed*11 + col*7);
-      const x = col*24 + (r-.5)*7;
-      const h = 28 + rand(seed*17 + col*3)*85;
-      const w = 13 + rand(seed*21 + col)*7;
-      const depth = 18 + rand(seed*31 + col)*8;
-      const colors = [[.12,.18,.28],[.18,.24,.35],[.24,.15,.32],[.12,.29,.36]];
-      addObject([x,h/2,z+(rand(seed*9+col)-.5)*7], [w,h,depth], colors[Math.floor(r*colors.length)]);
-      addAnchor([x, h+3, z]);
-      if (col % 2 === 0) addAnchor([x+w*.62, h*.72, z+depth*.45]);
-    }
-    // Quelques plateformes lumineuses donnent des cibles faciles au début.
-    if (i % 2 === 0) {
-      addObject([-48,10,z+8], [8,1,8], [.08,.42,.48]);
-      addAnchor([-48,13,z+8]);
+    const buildingGenerator=window.WebGlideBuildings;
+    if (buildingGenerator && typeof buildingGenerator.generateCityChunk === 'function') {
+      buildingGenerator.generateCityChunk({
+        index:i,
+        z,
+        seed,
+        rand,
+        addObject:obj=>world.objects.push({p:obj.p,s:obj.s,color:obj.color,rotY:obj.rotY||0}),
+        addAnchor:p=>world.anchors.push({p})
+      });
+    } else {
+      // Fallback si index.html est ouvert directement sans charger les fichiers annexes.
+      for (let col=-3; col<=3; col++) {
+        const r = rand(seed*11 + col*7);
+        const x = col*24 + (r-.5)*7;
+        const h = 28 + rand(seed*17 + col*3)*85;
+        const w = 13 + rand(seed*21 + col)*7;
+        const depth = 18 + rand(seed*31 + col)*8;
+        const colors = [[.12,.18,.28],[.18,.24,.35],[.24,.15,.32],[.12,.29,.36]];
+        addObject([x,h/2,z+(rand(seed*9+col)-.5)*7], [w,h,depth], colors[Math.floor(r*colors.length)]);
+        addAnchor([x, h+3, z]);
+        if (col % 2 === 0) addAnchor([x+w*.62, h*.72, z+depth*.45]);
+      }
+      if (i % 2 === 0) {
+        addObject([-48,10,z+8], [8,1,8], [.08,.42,.48]);
+        addAnchor([-48,13,z+8]);
+      }
     }
   } else if (biome.name === 'Forêt géante') {
     for (let t=0; t<9; t++) {
