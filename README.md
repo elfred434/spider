@@ -24,4 +24,4 @@ Puis ouvrir <http://localhost:8000>.
 
 Le modèle original `models/web_runner.glb` est un personnage stylisé Web Runner avec casque, visière, panneaux de costume, emblème, gants, bottes et articulations. Le script de génération est disponible dans `tools/create_model.py`.
 
-Le fichier `.glb` est un modèle original et ne reprend pas de marque ou de costume officiel.
+Le fichier `.glb` est un modèle original et ne reprend pas de marque ou de costume officiel. Le chargeur GLB de `index.html` tente de le charger automatiquement depuis `models/web_runner.glb` et utilise le personnage procédural comme solution de secours si le jeu est ouvert sans serveur HTTP.

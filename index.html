@@ -223,6 +223,124 @@ function transform(m,p) {
   return [x/w,y/w,z/w];
 }
 
+// ------------------------- GLB loader -------------------------
+// Le jeu utilise le modèle GLB du dépôt lorsqu'il est servi par un serveur
+// HTTP. Si le fichier est ouvert directement ou si le chargement échoue, le
+// personnage procédural reste disponible comme solution de secours.
+let importedModel = null;
+let modelLoadState = 'Chargement du modèle GLB…';
+
+function identity4() {
+  return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+}
+function matrixFromNode(node) {
+  if (node.matrix) return new Float32Array(node.matrix);
+  const t=node.translation || [0,0,0];
+  const s=node.scale || [1,1,1];
+  const q=node.rotation || [0,0,0,1];
+  const x=q[0], y=q[1], z=q[2], w=q[3];
+  return new Float32Array([
+    (1-2*y*y-2*z*z)*s[0], (2*x*y+2*w*z)*s[0], (2*x*z-2*w*y)*s[0], 0,
+    (2*x*y-2*w*z)*s[1], (1-2*x*x-2*z*z)*s[1], (2*y*z+2*w*x)*s[1], 0,
+    (2*x*z+2*w*y)*s[2], (2*y*z-2*w*x)*s[2], (1-2*x*x-2*y*y)*s[2], 0,
+    t[0], t[1], t[2], 1
+  ]);
+}
+function componentCount(type) {
+  return ({SCALAR:1,VEC2:2,VEC3:3,VEC4:4,MAT2:4,MAT3:9,MAT4:16})[type] || 1;
+}
+function typedArrayFor(componentType) {
+  return ({5121:Uint8Array,5123:Uint16Array,5125:Uint32Array,5126:Float32Array})[componentType];
+}
+function readGLTFAccessor(gltf, bin, accessorIndex) {
+  const accessor=gltf.accessors[accessorIndex];
+  const view=gltf.bufferViews[accessor.bufferView];
+  const Ctor=typedArrayFor(accessor.componentType);
+  const components=componentCount(accessor.type);
+  const offset=(view.byteOffset||0)+(accessor.byteOffset||0);
+  return { data:new Ctor(bin,offset,accessor.count*components), count:accessor.count, components, componentType:accessor.componentType };
+}
+function materialColor(gltf, materialIndex) {
+  const material=(gltf.materials||[])[materialIndex];
+  const factor=material && material.pbrMetallicRoughness && material.pbrMetallicRoughness.baseColorFactor;
+  return factor ? factor.slice(0,3) : [.7,.8,.9];
+}
+function parseGLB(arrayBuffer) {
+  const view=new DataView(arrayBuffer);
+  if (view.getUint32(0,true)!==0x46546c67) throw new Error('Fichier GLB invalide');
+  let offset=12, json=null, bin=null;
+  while (offset<arrayBuffer.byteLength) {
+    const length=view.getUint32(offset,true);
+    const type=view.getUint32(offset+4,true);
+    const chunk=arrayBuffer.slice(offset+8,offset+8+length);
+    if (type===0x4e4f534a) json=JSON.parse(new TextDecoder().decode(chunk));
+    if (type===0x004e4942) bin=chunk;
+    offset+=8+length;
+  }
+  if (!json || !bin) throw new Error('Chunks GLB manquants');
+  return {gltf:json,bin};
+}
+async function loadGLB(url) {
+  try {
+    const response=await fetch(url, {cache:'no-store'});
+    if (!response.ok) throw new Error('HTTP '+response.status);
+    const parsed=parseGLB(await response.arrayBuffer());
+    const gltf=parsed.gltf, bin=parsed.bin, parts=[];
+    const scene=gltf.scenes[gltf.scene || 0];
+    function visit(nodeIndex,parentMatrix) {
+      const node=gltf.nodes[nodeIndex];
+      const worldMatrix=m4mul(parentMatrix,matrixFromNode(node));
+      if (node.mesh !== undefined) {
+        const mesh=gltf.meshes[node.mesh];
+        for (const primitive of mesh.primitives) {
+          if (primitive.attributes.POSITION === undefined) continue;
+          const positions=readGLTFAccessor(gltf,bin,primitive.attributes.POSITION);
+          const positionBuffer=gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER,positionBuffer);
+          gl.bufferData(gl.ARRAY_BUFFER,positions.data,gl.STATIC_DRAW);
+          let indexBuffer=null, indexCount=positions.count, indexType=null;
+          if (primitive.indices !== undefined) {
+            const indices=readGLTFAccessor(gltf,bin,primitive.indices);
+            indexBuffer=gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuffer);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,indices.data,gl.STATIC_DRAW);
+            indexCount=indices.count;
+            indexType=indices.componentType===5125 ? gl.UNSIGNED_INT : (indices.componentType===5121 ? gl.UNSIGNED_BYTE : gl.UNSIGNED_SHORT);
+          }
+          parts.push({positionBuffer,indexBuffer,indexCount,indexType,mode:primitive.mode || 4,matrix:worldMatrix,color:materialColor(gltf,primitive.material)});
+        }
+      }
+      for (const child of (node.children||[])) visit(child,worldMatrix);
+    }
+    for (const nodeIndex of (scene.nodes||[])) visit(nodeIndex,identity4());
+    if (!parts.length) throw new Error('Aucun mesh dans le GLB');
+    importedModel={parts};
+    modelLoadState='Modèle GLB actif';
+    statusEl.textContent=modelLoadState;
+    statusEl.style.color='#55e7ff';
+  } catch (error) {
+    console.warn('GLB non chargé, utilisation du personnage procédural :',error);
+    modelLoadState='Personnage procédural';
+  }
+}
+function drawImportedHero(vp) {
+  const root=m4translate(player.p[0],player.p[1],player.p[2]);
+  for (const part of importedModel.parts) {
+    gl.bindBuffer(gl.ARRAY_BUFFER,part.positionBuffer);
+    gl.vertexAttribPointer(positionLoc,3,gl.FLOAT,false,0,0);
+    gl.enableVertexAttribArray(positionLoc);
+    gl.uniformMatrix4fv(mvpLoc,false,m4mul(vp,m4mul(root,part.matrix)));
+    gl.uniform4f(colorLoc,part.color[0],part.color[1],part.color[2],1);
+    if (part.indexBuffer) {
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,part.indexBuffer);
+      gl.drawElements(part.mode,part.indexCount,part.indexType,0);
+    } else {
+      gl.drawArrays(part.mode,0,part.indexCount);
+    }
+  }
+  webOrigin=[player.p[0]+1.02,player.p[1]+1.05,player.p[2]+.35];
+}
+
 // ------------------------- World -----------------------------
 const world = { objects: [], anchors: [], generated: new Set() };
 const player = { p:[0,4,0], v:[0,0,-22], rope:null, grounded:true };
@@ -309,6 +427,7 @@ function ensureWorld() {
   for (let i=Math.max(-6,current-5); i<=current+22; i++) generateChunk(i);
 }
 ensureWorld();
+loadGLB('models/web_runner.glb');
 
 // ------------------------- Animation --------------------------
 function updateAnimation(dt) {
@@ -556,8 +675,9 @@ function render() {
     drawCube({p:a.p,s:[.7,.7,.7],color:[.15,.9,1]},viewProj);
   }
 
-  // Avatar stylisé : casque, visière, torse, articulations et membres animés.
-  drawHero(viewProj);
+  // Le modèle GLB est prioritaire ; le héros procédural sert de secours.
+  if (importedModel) drawImportedHero(viewProj);
+  else drawHero(viewProj);
   if (player.rope) {
     drawLine(webOrigin,player.rope.anchor.p,viewProj,[.75,1,1]);
   }
@@ -589,7 +709,7 @@ startButton.addEventListener('click',()=>{
   started=true;
   startScreen.classList.add('hidden');
   canvas.focus();
-  statusEl.textContent='Cherche un point lumineux';
+  statusEl.textContent=importedModel ? 'Modèle GLB actif' : 'Cherche un point lumineux';
   statusEl.style.color='#55e7ff';
 });
 
