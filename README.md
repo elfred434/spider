@@ -1,0 +1,27 @@
+# Web Glide
+
+Prototype de jeu 3D de voltige en navigateur, créé en HTML, CSS et JavaScript.
+
+## Lancer le prototype
+
+Ouvrir `index.html` dans un navigateur récent. Pour un lancement recommandé :
+
+```bash
+python3 -m http.server 8000
+```
+
+Puis ouvrir <http://localhost:8000>.
+
+## Commandes
+
+- Clic droit maintenu : accrocher une toile
+- Relâcher le clic droit : couper la toile
+- Espace : sauter ou se propulser
+- WASD : diriger le personnage
+- Échap : couper la toile
+
+## Modèle 3D
+
+Le modèle original `models/web_runner.glb` est un personnage stylisé Web Runner avec casque, visière, panneaux de costume, emblème, gants, bottes et articulations. Le script de génération est disponible dans `tools/create_model.py`.
+
+Le fichier `.glb` est un modèle original et ne reprend pas de marque ou de costume officiel.

@@ -1,0 +1,16 @@
+{
+  "name": "Web Runner",
+  "format": "glb",
+  "materials": [
+    "Suit Navy",
+    "Suit Blue Panels",
+    "Crimson Panels",
+    "Bright Crimson",
+    "Web Cyan",
+    "Visor White",
+    "Gold Belt",
+    "Mask Black"
+  ],
+  "generated_by": "tools/create_model.py",
+  "original_design": true
+}

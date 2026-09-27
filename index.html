@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Web Glide — Prototype</title>
+  <style>
+    :root {
+      --panel: rgba(9, 15, 30, .78);
+      --line: rgba(255,255,255,.14);
+      --text: #f4f7ff;
+      --muted: #aebbd8;
+      --cyan: #55e7ff;
+      --orange: #ff8b3d;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #07111f; color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; }
+    #game { width: 100%; height: 100%; display: block; outline: none; cursor: crosshair; }
+    #hud { position: fixed; inset: 0; pointer-events: none; }
+    .topbar { display: flex; gap: 10px; padding: 16px; flex-wrap: wrap; }
+    .card { min-width: 118px; padding: 10px 13px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+    .label { color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+    .value { margin-top: 2px; font-size: 20px; font-weight: 800; }
+    #hint { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 10px 15px; border: 1px solid var(--line); border-radius: 999px; color: #eaf3ff; background: rgba(6,11,23,.7); font-size: 13px; text-align: center; white-space: nowrap; }
+    #status { position: absolute; right: 16px; top: 16px; padding: 10px 13px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--cyan); font-weight: 700; }
+    #crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%,-50%); opacity: .9; }
+    #crosshair::before, #crosshair::after { content: ""; position: absolute; background: rgba(255,255,255,.92); box-shadow: 0 0 8px rgba(85,231,255,.8); }
+    #crosshair::before { width: 22px; height: 2px; top: 10px; left: 0; }
+    #crosshair::after { height: 22px; width: 2px; left: 10px; top: 0; }
+    #start { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 30%, rgba(34,88,130,.4), rgba(3,8,18,.92) 66%); }
+    .startbox { width: min(540px, calc(100vw - 34px)); padding: 30px; border: 1px solid rgba(148,225,255,.27); border-radius: 24px; background: rgba(7,16,32,.84); box-shadow: 0 28px 80px rgba(0,0,0,.45); text-align: center; }
+    h1 { margin: 0 0 8px; font-size: clamp(34px, 7vw, 64px); line-height: .95; letter-spacing: -.06em; }
+    .accent { color: var(--cyan); }
+    .startbox p { margin: 14px auto 22px; max-width: 450px; color: var(--muted); line-height: 1.55; }
+    button { border: 0; border-radius: 12px; padding: 13px 22px; color: #03111a; background: linear-gradient(135deg, #7af0ff, #48b9ff); font-size: 15px; font-weight: 850; cursor: pointer; box-shadow: 0 10px 25px rgba(61,202,255,.25); }
+    button:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .small { margin-top: 16px; color: #8092b4; font-size: 12px; }
+    .hidden { display: none !important; }
+    @media (max-width: 600px) { .topbar { padding: 10px; gap: 7px; } .card { min-width: 92px; padding: 8px 9px; } .value { font-size: 16px; } #hint { bottom: 12px; font-size: 11px; } }
+  </style>
+</head>
+<body>
+  <canvas id="game" tabindex="0" aria-label="Prototype Web Glide"></canvas>
+
+  <div id="hud">
+    <div class="topbar">
+      <div class="card"><div class="label">Distance</div><div class="value"><span id="distance">0</span> m</div></div>
+      <div class="card"><div class="label">Vitesse</div><div class="value"><span id="speed">0</span> km/h</div></div>
+      <div class="card"><div class="label">Zone</div><div class="value" id="biome">Ville</div></div>
+    </div>
+    <div id="status">Prêt à voltiger</div>
+    <div id="crosshair"></div>
+    <div id="hint">Clic droit maintenu : lancer une toile · Espace : sauter / se propulser · WASD : diriger</div>
+  </div>
+
+  <section id="start">
+    <div class="startbox">
+      <h1>WEB <span class="accent">GLIDE</span></h1>
+      <p>Prototype de jeu de voltige en navigateur. Traverse la ville, accroche-toi aux points lumineux et avance vers la forêt, les montagnes et le volcan.</p>
+      <button id="startButton">Commencer la voltige</button>
+      <div class="small">Prototype HTML, CSS et JavaScript autonome · ordinateur recommandé</div>
+    </div>
+  </section>
+
+<script>
+'use strict';
+
+// ------------------------------------------------------------
+// Web Glide : prototype 3D autonome sans bibliothèque externe.
+// Le monde est généré par portions au fur et à mesure du trajet.
+// ------------------------------------------------------------
+
+const canvas = document.getElementById('game');
+const gl = canvas.getContext('webgl', { antialias: true, alpha: false });
+const startScreen = document.getElementById('start');
+const startButton = document.getElementById('startButton');
+const distanceEl = document.getElementById('distance');
+const speedEl = document.getElementById('speed');
+const biomeEl = document.getElementById('biome');
+const statusEl = document.getElementById('status');
+
+if (!gl) {
+  document.body.innerHTML = '<div style="padding:30px;color:white;font-family:sans-serif">Ce navigateur ne prend pas en charge WebGL.</div>';
+  throw new Error('WebGL indisponible');
+}
+
+const cubeVS = `
+  attribute vec3 aPosition;
+  uniform mat4 uMVP;
+  void main() { gl_Position = uMVP * vec4(aPosition, 1.0); }
+`;
+const cubeFS = `
+  precision mediump float;
+  uniform vec4 uColor;
+  void main() { gl_FragColor = uColor; }
+`;
+
+function shader(type, source) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, source);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, shader(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, shader(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+
+const renderProgram = program(cubeVS, cubeFS);
+const positionLoc = gl.getAttribLocation(renderProgram, 'aPosition');
+const mvpLoc = gl.getUniformLocation(renderProgram, 'uMVP');
+const colorLoc = gl.getUniformLocation(renderProgram, 'uColor');
+
+const cubeVertices = new Float32Array([
+  // front
+  -1,-1, 1,  1,-1, 1,  1, 1, 1,  -1,-1, 1,  1, 1, 1,  -1, 1, 1,
+  // back
+   1,-1,-1, -1,-1,-1, -1, 1,-1,   1,-1,-1, -1, 1,-1,   1, 1,-1,
+  // left
+  -1,-1,-1, -1,-1, 1, -1, 1, 1,  -1,-1,-1, -1, 1, 1,  -1, 1,-1,
+  // right
+   1,-1, 1,  1,-1,-1,  1, 1,-1,   1,-1, 1,  1, 1,-1,   1, 1, 1,
+  // top
+  -1, 1, 1,  1, 1, 1,  1, 1,-1,  -1, 1, 1,  1, 1,-1,  -1, 1,-1,
+  // bottom
+  -1,-1,-1,  1,-1,-1,  1,-1, 1,  -1,-1,-1,  1,-1, 1,  -1,-1, 1
+]);
+const cubeBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, cubeBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, cubeVertices, gl.STATIC_DRAW);
+
+// Sphère basse-poly pour la tête, les épaules et les articulations.
+function createSphereVertices(latitudes=10, longitudes=16) {
+  const data = [];
+  const point = (lat, lon) => {
+    const phi = lat * Math.PI / latitudes;
+    const theta = lon * Math.PI * 2 / longitudes;
+    return [Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta)];
+  };
+  for (let lat=0; lat<latitudes; lat++) {
+    for (let lon=0; lon<longitudes; lon++) {
+      const a=point(lat,lon), b=point(lat,lon+1), c=point(lat+1,lon+1), d=point(lat+1,lon);
+      data.push(...a,...b,...c, ...a,...c,...d);
+    }
+  }
+  return new Float32Array(data);
+}
+const sphereVertices = createSphereVertices();
+const sphereBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, sphereBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, sphereVertices, gl.STATIC_DRAW);
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.floor(innerWidth * dpr);
+  const h = Math.floor(innerHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+  }
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+window.addEventListener('resize', resize);
+resize();
+
+gl.enable(gl.DEPTH_TEST);
+gl.enable(gl.CULL_FACE);
+gl.cullFace(gl.BACK);
+
+// ------------------------- Math 3D --------------------------
+function add(a,b) { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+function sub(a,b) { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+function mul(a,s) { return [a[0]*s, a[1]*s, a[2]*s]; }
+function dot(a,b) { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+function cross(a,b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function len(a) { return Math.hypot(a[0],a[1],a[2]); }
+function norm(a) { const l = len(a) || 1; return [a[0]/l,a[1]/l,a[2]/l]; }
+function m4mul(a,b) {
+  const o = new Float32Array(16);
+  for (let c=0;c<4;c++) for (let r=0;r<4;r++) {
+    o[c*4+r] = a[r] * b[c*4] + a[4+r] * b[c*4+1] + a[8+r] * b[c*4+2] + a[12+r] * b[c*4+3];
+  }
+  return o;
+}
+function m4translate(x,y,z) { return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,z,1]); }
+function m4scale(x,y,z) { return new Float32Array([x,0,0,0, 0,y,0,0, 0,0,z,0, 0,0,0,1]); }
+function m4rotY(a) { const c=Math.cos(a), s=Math.sin(a); return new Float32Array([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]); }
+function m4rotX(a) { const c=Math.cos(a), s=Math.sin(a); return new Float32Array([1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1]); }
+function m4rotZ(a) { const c=Math.cos(a), s=Math.sin(a); return new Float32Array([c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1]); }
+function modelMatrix(obj) {
+  let rotation=m4rotY(obj.rotY ?? obj.rot ?? 0);
+  rotation=m4mul(rotation,m4rotX(obj.rotX ?? 0));
+  rotation=m4mul(rotation,m4rotZ(obj.rotZ ?? 0));
+  return m4mul(m4translate(obj.p[0],obj.p[1],obj.p[2]),m4mul(rotation,m4scale(obj.s[0],obj.s[1],obj.s[2])));
+}
+function basisForDirection(direction) {
+  const y=norm(direction);
+  const reference=Math.abs(y[1])>.92 ? [1,0,0] : [0,1,0];
+  const x=norm(cross(reference,y));
+  const z=cross(y,x);
+  return new Float32Array([x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0, 0,0,0,1]);
+}
+function perspective(fov, aspect, near, far) {
+  const f=1/Math.tan(fov/2), nf=1/(near-far);
+  return new Float32Array([f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,(2*far*near)*nf,0]);
+}
+function lookAt(eye, center, up) {
+  const z=norm(sub(eye,center)), x=norm(cross(up,z)), y=cross(z,x);
+  return new Float32Array([x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0, -dot(x,eye),-dot(y,eye),-dot(z,eye),1]);
+}
+function transform(m,p) {
+  const x=m[0]*p[0]+m[4]*p[1]+m[8]*p[2]+m[12];
+  const y=m[1]*p[0]+m[5]*p[1]+m[9]*p[2]+m[13];
+  const z=m[2]*p[0]+m[6]*p[1]+m[10]*p[2]+m[14];
+  const w=m[3]*p[0]+m[7]*p[1]+m[11]*p[2]+m[15];
+  return [x/w,y/w,z/w];
+}
+
+// ------------------------- World -----------------------------
+const world = { objects: [], anchors: [], generated: new Set() };
+const player = { p:[0,4,0], v:[0,0,-22], rope:null, grounded:true };
+const camera = { p:[0,11,18] };
+const animation = { phase:0, runBlend:0, swingBlend:0, breathing:0 };
+let viewProj = new Float32Array(16);
+let started = false;
+let lastTime = performance.now();
+let elapsed = 0;
+let jumpWasPressed = false;
+const keys = Object.create(null);
+
+function rand(seed) {
+  const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+function biomeAt(distance) {
+  if (distance < 500) return { name:'Ville', sky:[0.035,0.09,0.16], ground:[0.09,0.11,0.15] };
+  if (distance < 1400) return { name:'Forêt géante', sky:[0.035,0.15,0.16], ground:[0.06,0.20,0.12] };
+  if (distance < 2600) return { name:'Montagnes', sky:[0.10,0.15,0.22], ground:[0.18,0.17,0.19] };
+  return { name:'Volcan', sky:[0.17,0.035,0.025], ground:[0.16,0.045,0.025] };
+}
+function addObject(p, s, color, rot=0) { world.objects.push({p,s,color,rot}); }
+function addAnchor(p) { world.anchors.push({p}); }
+
+function generateChunk(i) {
+  if (world.generated.has(i)) return;
+  world.generated.add(i);
+  const z = -i*40;
+  const d = Math.max(0, -z);
+  const biome = biomeAt(d);
+  const seed = i + 100;
+
+  addObject([0,-2,z], [150,4,42], biome.ground);
+
+  if (biome.name === 'Ville') {
+    for (let col=-3; col<=3; col++) {
+      const r = rand(seed*11 + col*7);
+      const x = col*24 + (r-.5)*7;
+      const h = 28 + rand(seed*17 + col*3)*85;
+      const w = 13 + rand(seed*21 + col)*7;
+      const depth = 18 + rand(seed*31 + col)*8;
+      const colors = [[.12,.18,.28],[.18,.24,.35],[.24,.15,.32],[.12,.29,.36]];
+      addObject([x,h/2,z+(rand(seed*9+col)-.5)*7], [w,h,depth], colors[Math.floor(r*colors.length)]);
+      addAnchor([x, h+3, z]);
+      if (col % 2 === 0) addAnchor([x+w*.62, h*.72, z+depth*.45]);
+    }
+    // Quelques plateformes lumineuses donnent des cibles faciles au début.
+    if (i % 2 === 0) {
+      addObject([-48,10,z+8], [8,1,8], [.08,.42,.48]);
+      addAnchor([-48,13,z+8]);
+    }
+  } else if (biome.name === 'Forêt géante') {
+    for (let t=0; t<9; t++) {
+      const x = (rand(seed*5+t*13)-.5)*120;
+      const tz = z + (rand(seed*8+t*19)-.5)*34;
+      const h = 18 + rand(seed*12+t)*30;
+      addObject([x,h/2,tz], [3.5,h,3.5], [.28,.16,.07]);
+      addObject([x,h+5,tz], [12+rand(seed+t)*8,9+rand(seed+t*2)*8,12+rand(seed+t*3)*8], [.05,.38+.12*rand(seed+t),.18]);
+      addAnchor([x,h+12,tz]);
+    }
+  } else if (biome.name === 'Montagnes') {
+    for (let t=0; t<7; t++) {
+      const x=(rand(seed*4+t)-.5)*130;
+      const h=14+rand(seed*9+t)*38;
+      const tz=z+(rand(seed*5+t)-.5)*30;
+      addObject([x,h/2,tz], [16+rand(seed+t)*15,h,16+rand(seed*2+t)*15], [.20,.22,.27]);
+      addAnchor([x,h+5,tz]);
+    }
+  } else {
+    for (let t=0; t<7; t++) {
+      const x=(rand(seed*6+t)-.5)*120;
+      const h=15+rand(seed*10+t)*34;
+      const tz=z+(rand(seed*3+t)-.5)*30;
+      addObject([x,h/2,tz], [12+rand(seed+t)*14,h,12+rand(seed*2+t)*14], [.18,.07,.055]);
+      addObject([x+.1,h+.45,tz], [3+rand(seed+t)*5,.8,3+rand(seed+t*2)*5], [.95,.18,.025]);
+      addAnchor([x,h+6,tz]);
+    }
+  }
+}
+
+function ensureWorld() {
+  const current = Math.max(0, Math.floor(-player.p[2]/40));
+  for (let i=Math.max(-6,current-5); i<=current+22; i++) generateChunk(i);
+}
+ensureWorld();
+
+// ------------------------- Animation --------------------------
+function updateAnimation(dt) {
+  const movement=Math.hypot(player.v[0],player.v[2]);
+  const runTarget=player.rope ? 0 : Math.min(1,movement/28);
+  const swingTarget=player.rope ? 1 : 0;
+  const smooth=1-Math.exp(-dt*9);
+  animation.runBlend += (runTarget-animation.runBlend)*smooth;
+  animation.swingBlend += (swingTarget-animation.swingBlend)*smooth;
+  animation.phase += dt*(5+movement*.42);
+  animation.breathing += dt*2.1;
+}
+
+// ------------------------- Physics ----------------------------
+function releaseRope() {
+  if (!player.rope) return;
+  player.rope = null;
+  statusEl.textContent = 'Toile coupée';
+  statusEl.style.color = '#ffcf74';
+}
+function findAnchor() {
+  let best=null, bestScore=Infinity;
+  const cx=canvas.width/2, cy=canvas.height/2;
+  for (const a of world.anchors) {
+    const dWorld=len(sub(a.p,player.p));
+    if (dWorld > 115) continue;
+    const q=transform(viewProj,a.p);
+    if (q[2] < -1 || q[2] > 1) continue;
+    const sx=(q[0]*.5+.5)*canvas.width;
+    const sy=(1-(q[1]*.5+.5))*canvas.height;
+    const screenD=Math.hypot(sx-cx,sy-cy)/canvas.width;
+    if (screenD > .24) continue;
+    const score=screenD*180 + dWorld*.16;
+    if (score<bestScore) { bestScore=score; best=a; }
+  }
+  return best;
+}
+function attachRope() {
+  const a=findAnchor();
+  if (!a) {
+    statusEl.textContent='Aucun point visé';
+    statusEl.style.color='#ff9c9c';
+    return;
+  }
+  const d=len(sub(player.p,a.p));
+  player.rope={ anchor:a, length:Math.max(7,d*.94) };
+  statusEl.textContent='Toile accrochée';
+  statusEl.style.color='#55e7ff';
+}
+function updatePhysics(dt) {
+  const p=player.p, v=player.v;
+  const gravity=-25;
+  // Le déplacement vers l'avant est automatique : le joueur reste en mouvement.
+  if (v[2] > -25) v[2] -= 15*dt;
+  if (keys.w) v[2] -= 18*dt;
+  if (keys.s) v[2] += 12*dt;
+  if (keys.a) v[0] -= 24*dt;
+  if (keys.d) v[0] += 24*dt;
+  v[0] *= Math.pow(.986,dt*60);
+
+  if (player.rope) {
+    v[1] += gravity*dt;
+    p[0]+=v[0]*dt; p[1]+=v[1]*dt; p[2]+=v[2]*dt;
+    const r=sub(p,player.rope.anchor.p);
+    const current=len(r);
+    if (current > player.rope.length) {
+      const n=mul(r,1/current);
+      p[0]=player.rope.anchor.p[0]+n[0]*player.rope.length;
+      p[1]=player.rope.anchor.p[1]+n[1]*player.rope.length;
+      p[2]=player.rope.anchor.p[2]+n[2]*player.rope.length;
+      const outward=dot(v,n);
+      if (outward>0) { v[0]-=n[0]*outward; v[1]-=n[1]*outward; v[2]-=n[2]*outward; }
+    }
+    player.grounded=false;
+  } else {
+    v[1]+=gravity*dt;
+    p[0]+=v[0]*dt; p[1]+=v[1]*dt; p[2]+=v[2]*dt;
+    if (p[1] < 2) {
+      p[1]=2; if(v[1]<0) v[1]=0; player.grounded=true;
+    } else player.grounded=false;
+  }
+
+  if (jumpWasPressed) {
+    if (player.rope) { releaseRope(); v[1]+=7; v[2]-=4; }
+    else if (player.grounded) { v[1]=13; player.grounded=false; }
+    jumpWasPressed=false;
+  }
+  p[0]=Math.max(-105,Math.min(105,p[0]));
+}
+
+// ------------------------- Rendering --------------------------
+function drawCube(obj, vp) {
+  gl.bindBuffer(gl.ARRAY_BUFFER,cubeBuffer);
+  gl.vertexAttribPointer(positionLoc,3,gl.FLOAT,false,0,0);
+  gl.enableVertexAttribArray(positionLoc);
+  gl.uniformMatrix4fv(mvpLoc,false,m4mul(vp,modelMatrix(obj)));
+  gl.uniform4f(colorLoc,obj.color[0],obj.color[1],obj.color[2],1);
+  gl.drawArrays(gl.TRIANGLES,0,36);
+}
+function drawSphere(obj, vp) {
+  gl.bindBuffer(gl.ARRAY_BUFFER,sphereBuffer);
+  gl.vertexAttribPointer(positionLoc,3,gl.FLOAT,false,0,0);
+  gl.enableVertexAttribArray(positionLoc);
+  gl.uniformMatrix4fv(mvpLoc,false,m4mul(vp,modelMatrix(obj)));
+  gl.uniform4f(colorLoc,obj.color[0],obj.color[1],obj.color[2],1);
+  gl.drawArrays(gl.TRIANGLES,0,sphereVertices.length/3);
+}
+function drawLimb(a,b,width,color,vp) {
+  const direction=sub(b,a), lengthValue=len(direction), middle=mul(add(a,b),.5);
+  const model=m4mul(m4translate(middle[0],middle[1],middle[2]),m4mul(basisForDirection(direction),m4scale(width,lengthValue/2,width)));
+  gl.bindBuffer(gl.ARRAY_BUFFER,cubeBuffer);
+  gl.vertexAttribPointer(positionLoc,3,gl.FLOAT,false,0,0);
+  gl.enableVertexAttribArray(positionLoc);
+  gl.uniformMatrix4fv(mvpLoc,false,m4mul(vp,model));
+  gl.uniform4f(colorLoc,color[0],color[1],color[2],1);
+  gl.drawArrays(gl.TRIANGLES,0,36);
+}
+function drawLine(a,b,vp,color) {
+  const lineBuffer=drawLine.buffer || (drawLine.buffer=gl.createBuffer());
+  gl.bindBuffer(gl.ARRAY_BUFFER,lineBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([...a,...b]),gl.DYNAMIC_DRAW);
+  gl.vertexAttribPointer(positionLoc,3,gl.FLOAT,false,0,0);
+  gl.enableVertexAttribArray(positionLoc);
+  gl.uniformMatrix4fv(mvpLoc,false,vp);
+  gl.uniform4f(colorLoc,color[0],color[1],color[2],1);
+  gl.drawArrays(gl.LINES,0,2);
+}
+function updateCamera(dt) {
+  const desired=[player.p[0]-player.v[0]*.12, player.p[1]+7.5, player.p[2]-player.v[2]*.16+10];
+  const k=1-Math.pow(.0008,dt);
+  camera.p[0]+=(desired[0]-camera.p[0])*k;
+  camera.p[1]+=(desired[1]-camera.p[1])*k;
+  camera.p[2]+=(desired[2]-camera.p[2])*k;
+}
+
+let webOrigin=[0,0,0];
+function webLine(a,b,vp,width=.035) {
+  drawLimb(a,b,width,[.72,1,1],vp);
+}
+function drawHero(vp) {
+  const [x,y,z]=player.p;
+  const run=Math.sin(animation.phase)*.24*animation.runBlend;
+  const opposite=-run;
+  const bounce=Math.abs(Math.sin(animation.phase))*.08*animation.runBlend + Math.sin(animation.breathing)*.025;
+  const baseY=y+bounce;
+  const torsoLean=Math.max(-.18,Math.min(.18,-player.v[2]*.004));
+  const suit=[.025,.065,.16], suitLight=[.05,.16,.30], red=[.78,.06,.13], brightRed=[1,.15,.20];
+  const cyan=[.10,.82,1], dark=[.018,.025,.06], white=[.78,.96,1], gold=[1,.55,.12];
+
+  // Ombre sous le personnage.
+  drawCube({p:[x,.08,z],s:[1.25,.035,1.1],color:[.015,.02,.035]},vp);
+
+  // Jambes articulées, empiècements et bottes.
+  const leftHip=[x-.43,baseY+.18,z], rightHip=[x+.43,baseY+.18,z];
+  const leftFoot=[x-.43+run,baseY-1.62,z+.18], rightFoot=[x+.43+opposite,baseY-1.62,z+.18];
+  drawLimb(leftHip,leftFoot,.31,suit,vp);
+  drawLimb(rightHip,rightFoot,.31,suit,vp);
+  drawCube({p:[leftFoot[0],leftFoot[1]-.15,leftFoot[2]+.13],s:[.40,.20,.62],color:red,rotX:run*.35},vp);
+  drawCube({p:[rightFoot[0],rightFoot[1]-.15,rightFoot[2]+.13],s:[.40,.20,.62],color:red,rotX:opposite*.35},vp);
+  drawCube({p:[leftFoot[0],leftFoot[1]+.35,leftFoot[2]+.33],s:[.26,.22,.035],color:cyan},vp);
+  drawCube({p:[rightFoot[0],rightFoot[1]+.35,rightFoot[2]+.33],s:[.26,.22,.035],color:cyan},vp);
+
+  // Torse multicouche avec détails de matière et panneaux latéraux.
+  drawCube({p:[x,baseY+1.18,z],s:[.93,1.10,.58],color:suit,rotX:torsoLean},vp);
+  drawCube({p:[x,baseY+1.30,z+.60],s:[.70,.70,.075],color:red,rotX:torsoLean},vp);
+  drawCube({p:[x-.78,baseY+1.22,z+.02],s:[.13,.80,.60],color:suitLight,rotZ:torsoLean*.35},vp);
+  drawCube({p:[x+.78,baseY+1.22,z+.02],s:[.13,.80,.60],color:suitLight,rotZ:torsoLean*.35},vp);
+  drawCube({p:[x,baseY+.27,z+.02],s:[.98,.16,.64],color:gold},vp);
+  drawCube({p:[x,baseY+.27,z+.68],s:[.20,.18,.06],color:cyan},vp);
+
+  // Motif de toile sur le torse : rayons et anneaux concentriques.
+  const front=z+.70;
+  webLine([x,baseY+.68,front],[x,baseY+1.98,front],vp,.028);
+  webLine([x-.55,baseY+.88,front],[x+.55,baseY+1.80,front],vp,.028);
+  webLine([x+.55,baseY+.88,front],[x-.55,baseY+1.80,front],vp,.028);
+  webLine([x-.52,baseY+1.05,front],[x,baseY+.94,front],vp,.026);
+  webLine([x,baseY+.94,front],[x+.52,baseY+1.05,front],vp,.026);
+  webLine([x-.62,baseY+1.38,front],[x,baseY+1.26,front],vp,.026);
+  webLine([x,baseY+1.26,front],[x+.62,baseY+1.38,front],vp,.026);
+  webLine([x-.48,baseY+1.70,front],[x,baseY+1.58,front],vp,.026);
+  webLine([x,baseY+1.58,front],[x+.48,baseY+1.70,front],vp,.026);
+
+  // Emblème central lumineux.
+  drawCube({p:[x,baseY+1.48,z+.735],s:[.065,.34,.035],color:white,rotZ:Math.PI/4},vp);
+  drawCube({p:[x,baseY+1.48,z+.74],s:[.065,.34,.035],color:cyan,rotZ:-Math.PI/4},vp);
+
+  // Cou et tête masquée, avec visière et détails de toile.
+  drawCube({p:[x,baseY+2.02,z],s:[.27,.25,.27],color:dark},vp);
+  drawSphere({p:[x,baseY+2.76,z],s:[.72,.78,.72],color:dark},vp);
+  drawSphere({p:[x,baseY+2.79,z+.56],s:[.53,.31,.08],color:cyan},vp);
+  drawCube({p:[x-.22,baseY+2.82,z+.66],s:[.13,.22,.035],color:white,rotZ:-.18},vp);
+  drawCube({p:[x+.22,baseY+2.82,z+.66],s:[.13,.22,.035],color:white,rotZ:.18},vp);
+  webLine([x,baseY+2.48,z+.64],[x,baseY+3.30,z+.64],vp,.025);
+  webLine([x-.48,baseY+2.65,z+.58],[x,baseY+2.75,z+.68],vp,.022);
+  webLine([x,baseY+2.75,z+.68],[x+.48,baseY+2.65,z+.58],vp,.022);
+  // Petite crête arrière pour donner une silhouette plus travaillée au masque.
+  drawCube({p:[x,baseY+3.37,z-.20],s:[.18,.28,.16],color:red,rotZ:.12},vp);
+
+  const leftShoulder=[x-.98,baseY+1.85,z], rightShoulder=[x+.98,baseY+1.85,z];
+  drawSphere({p:leftShoulder,s:[.37,.40,.44],color:brightRed},vp);
+  drawSphere({p:rightShoulder,s:[.37,.40,.44],color:brightRed},vp);
+
+  // Bras : le bras droit vise la toile lorsqu'une accroche est active.
+  let leftHand, rightHand;
+  if (player.rope) {
+    const direction=norm(sub(player.rope.anchor.p,rightShoulder));
+    rightHand=add(rightShoulder,mul(direction,1.85));
+    leftHand=[x-1.08,baseY+.95+run*.45,z+.08];
+  } else {
+    leftHand=[x-1.08,baseY+.90+run,z+.15];
+    rightHand=[x+1.08,baseY+.90+opposite,z-.05];
+  }
+  drawLimb(leftShoulder,leftHand,.27,red,vp);
+  drawLimb(rightShoulder,rightHand,.27,red,vp);
+  drawSphere({p:leftHand,s:[.30,.30,.30],color:cyan},vp);
+  drawSphere({p:rightHand,s:[.30,.30,.30],color:cyan},vp);
+  drawCube({p:[leftHand[0],leftHand[1],leftHand[2]+.24],s:[.12,.18,.06],color:white},vp);
+  drawCube({p:[rightHand[0],rightHand[1],rightHand[2]+.24],s:[.12,.18,.06],color:white},vp);
+
+  webOrigin=player.rope ? rightHand : [x+.72,baseY+1.1,z+.35];
+}
+function render() {
+  resize();
+  const distance=Math.max(0,-player.p[2]);
+  const biome=biomeAt(distance);
+  gl.clearColor(biome.sky[0],biome.sky[1],biome.sky[2],1);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+
+  const proj=perspective(Math.PI/3,canvas.width/canvas.height,.1,900);
+  const target=[player.p[0],player.p[1]+1.3,player.p[2]-22];
+  const view=lookAt(camera.p,target,[0,1,0]);
+  viewProj=m4mul(proj,view);
+
+  gl.useProgram(renderProgram);
+  gl.bindBuffer(gl.ARRAY_BUFFER,cubeBuffer);
+  gl.vertexAttribPointer(positionLoc,3,gl.FLOAT,false,0,0);
+  gl.enableVertexAttribArray(positionLoc);
+
+  for (const o of world.objects) {
+    if (Math.abs(o.p[2]-player.p[2])>260 || Math.abs(o.p[0]-player.p[0])>160) continue;
+    drawCube(o,viewProj);
+  }
+  for (const a of world.anchors) {
+    if (Math.abs(a.p[2]-player.p[2])>180 || Math.abs(a.p[0]-player.p[0])>130) continue;
+    drawCube({p:a.p,s:[.7,.7,.7],color:[.15,.9,1]},viewProj);
+  }
+
+  // Avatar stylisé : casque, visière, torse, articulations et membres animés.
+  drawHero(viewProj);
+  if (player.rope) {
+    drawLine(webOrigin,player.rope.anchor.p,viewProj,[.75,1,1]);
+  }
+
+  distanceEl.textContent=Math.floor(distance).toLocaleString('fr-FR');
+  const speed=Math.round(Math.hypot(player.v[0],player.v[1],player.v[2])*3.6);
+  speedEl.textContent=speed.toLocaleString('fr-FR');
+  biomeEl.textContent=biome.name;
+}
+
+// ------------------------- Input ------------------------------
+window.addEventListener('keydown',e=>{
+  keys[e.key.toLowerCase()]=true;
+  if (e.code==='Space') { e.preventDefault(); if(!e.repeat) jumpWasPressed=true; }
+  if (e.key==='Escape') releaseRope();
+});
+window.addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false; });
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('pointerdown',e=>{
+  if (!started || e.button!==2) return;
+  e.preventDefault();
+  attachRope();
+  canvas.setPointerCapture?.(e.pointerId);
+});
+canvas.addEventListener('pointerup',e=>{
+  if (e.button===2) releaseRope();
+});
+startButton.addEventListener('click',()=>{
+  started=true;
+  startScreen.classList.add('hidden');
+  canvas.focus();
+  statusEl.textContent='Cherche un point lumineux';
+  statusEl.style.color='#55e7ff';
+});
+
+function loop(now) {
+  const dt=Math.min(.033,(now-lastTime)/1000);
+  lastTime=now;
+  if (started) {
+    elapsed+=dt;
+    updatePhysics(dt);
+    updateAnimation(dt);
+    ensureWorld();
+    updateCamera(dt);
+  }
+  render();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
